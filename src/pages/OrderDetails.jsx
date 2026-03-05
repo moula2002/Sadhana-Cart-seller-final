@@ -51,24 +51,54 @@ const formatOrderDate = (timestamp) => {
   }
 }
 
-// Helper function to extract customer info from various field names
+// IMPROVED: Better customer info extraction with more field possibilities
 const extractCustomerInfo = (orderData) => {
   const data = orderData || {}
   
-  // Try different possible customer field structures
+ 
+  
+  // Method 1: Check for nested customer object
   if (data.customer && typeof data.customer === 'object') {
+    console.log('Found customer object:', data.customer)
     return {
-      name: data.customer.name || data.customer.displayName || data.customer.fullName || 'Anonymous',
-      email: data.customer.email || data.customer.emailAddress || '',
-      phone: data.customer.phone || data.customer.phoneNumber || data.customer.mobile || ''
+      name: data.customer.name || data.customer.displayName || data.customer.fullName || 
+             data.customer.userName || data.customer.customerName || 'Anonymous',
+      email: data.customer.email || data.customer.emailAddress || 
+             data.customer.userEmail || data.customer.customerEmail || '',
+      phone: data.customer.phone || data.customer.phoneNumber || data.customer.mobile || 
+             data.customer.telephone || data.customer.userPhone || data.customer.customerPhone || ''
     }
   }
   
-  // Try root level fields
+  // Method 2: Check for buyer object
+  if (data.buyer && typeof data.buyer === 'object') {
+    console.log('Found buyer object:', data.buyer)
+    return {
+      name: data.buyer.name || data.buyer.displayName || 'Anonymous',
+      email: data.buyer.email || data.buyer.emailAddress || '',
+      phone: data.buyer.phone || data.buyer.phoneNumber || data.buyer.mobile || ''
+    }
+  }
+  
+  // Method 3: Check for user object
+  if (data.user && typeof data.user === 'object') {
+    console.log('Found user object:', data.user)
+    return {
+      name: data.user.name || data.user.displayName || 'Anonymous',
+      email: data.user.email || data.user.emailAddress || '',
+      phone: data.user.phone || data.user.phoneNumber || data.user.mobile || ''
+    }
+  }
+  
+  // Method 4: Check root level fields with more variations
+  console.log('Checking root level fields')
   return {
-    name: data.userName || data.buyerName || data.customerName || data.name || 'Anonymous',
-    email: data.userEmail || data.buyerEmail || data.customerEmail || data.email || '',
-    phone: data.userPhone || data.buyerPhone || data.customerPhone || data.phone || ''
+    name: data.userName || data.buyerName || data.customerName || data.name || 
+           data.displayName || data.fullName || data.purchaserName || 'Anonymous',
+    email: data.userEmail || data.buyerEmail || data.customerEmail || data.email || 
+           data.emailAddress || data.purchaserEmail || '',
+    phone: data.userPhone || data.buyerPhone || data.customerPhone || data.phone || 
+           data.phoneNumber || data.mobile || data.telephone || data.purchaserPhone || ''
   }
 }
 
@@ -91,6 +121,11 @@ const extractProducts = (orderData) => {
   
   if (data.item && typeof data.item === 'object') {
     return [data.item]
+  }
+  
+  // Check for cart items
+  if (data.cart && Array.isArray(data.cart)) {
+    return data.cart
   }
   
   return []
@@ -141,7 +176,6 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
   const [editingCustomer, setEditingCustomer] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [showActivity, setShowActivity] = useState(false)
-  const [debugMode, setDebugMode] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -288,12 +322,13 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
 
   // Process raw order data into standardized format
   const processOrderData = (orderData, id, path) => {
-    console.log('Processing order data:', { id, data: orderData })
+    console.log('Processing order data - FULL DATA:', orderData)
     
     const customer = extractCustomerInfo(orderData)
     const products = extractProducts(orderData)
     const status = extractStatus(orderData)
     const total = orderData.total || orderData.amount || orderData.price || calculateTotal(products)
+    
     
     return {
       id: id,
@@ -726,18 +761,6 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-white">Email</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input 
-                          type="email" 
-                          value={customerEdit.email}
-                          onChange={(e) => setCustomerEdit({...customerEdit, email: e.target.value})}
-                          className="pl-10 pr-3 py-2 bg-gray-800 border border-gray-600 text-white rounded-lg w-full"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
                       <label className="block text-white">Phone</label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -753,7 +776,6 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
                 ) : (
                   <>
                     <p className="text-gray-300"><strong className="text-white block">Name:</strong> {order.customer?.name || 'Anonymous'}</p>
-                    <p className="text-gray-300"><strong className="text-white block">Email:</strong> {order.customer?.email || 'No email'}</p>
                     <p className="text-gray-300"><strong className="text-white block">Phone:</strong> {order.customer?.phone || 'No phone'}</p>
                     <p className="text-gray-300"><strong className="text-white block">Payment:</strong> {order.paymentMethod || 'N/A'}</p>
                   </>
@@ -898,8 +920,9 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
               </button>
               <button 
                 onClick={() => {
-                  console.log('Order data:', order)
-                  alert('Order data logged to console. Check developer tools.')
+                  console.log('Customer object:', order.customer)
+                  console.log('Original order data:', orders.find(o => o.id === order.id))
+                  alert('Order data logged to console. Check developer tools (F12) -> Console tab.')
                 }}
                 className="flex items-center text-gray-400 hover:text-yellow-400 bg-gray-700/50 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm"
               >
@@ -976,10 +999,9 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
             <h1 className="text-4xl font-extrabold text-white mb-2 tracking-tight">Order Management Dashboard 📦</h1>
             <p className="text-gray-400 text-lg">Track, search, and manage customer orders with real-time updates.</p>
           </div>
+      
         </div>
       </div>
-
-  
 
       {message && (
         <div className={`mb-6 p-4 rounded-xl ${message.includes('Error') ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-green-900/50 text-green-300 border border-green-700'}`}>
@@ -1050,6 +1072,7 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
                   <tr>
                     <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Order ID</th>
                     <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Phone</th>
                     <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Products</th>
                     <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Total</th>
                     <th className="px-6 py-3 text-xs font-semibold text-gray-300 uppercase tracking-wider">Date</th>
@@ -1062,21 +1085,39 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
                     <tr key={order.id} className="bg-gray-800 hover:bg-gray-700/70 transition-colors duration-200">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-white/90">{order.id}</td>
                       
-                      {/* CUSTOMER COLUMN */}
+                      {/* CUSTOMER NAME COLUMN */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-white mb-0.5">{order.customer?.name || 'Anonymous'}</span>
-                          <span className="text-xs text-gray-400 flex items-center">{order.customer?.email || 'No Email'}</span>
-                          <span className="text-[11px] text-blue-400/80 font-medium">{order.customer?.phone || ''}</span>
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 mr-2 text-blue-400" />
+                          <span className="text-sm font-bold text-white">
+                            {order.customer?.name || 'Anonymous'}
+                          </span>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{order.products?.length || 0} item(s)</td>
+
+                      {/* PHONE COLUMN */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Phone className="w-4 h-4 mr-2 text-green-400" />
+                          <span className="text-sm text-gray-300">
+                            {order.customer?.phone || 'No phone'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <div className="flex items-center">
+                          <Package className="w-4 h-4 mr-2 text-purple-400" />
+                          {order.products?.length || 0} item(s)
+                        </div>
+                      </td>
                       
                       {/* TOTAL COLUMN */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-green-400 bg-green-400/10 px-2 py-1 rounded-md border border-green-400/20 inline-block">
-                          ₹{order.total?.toLocaleString() || '0'}
+                        <div className="text-sm font-bold text-green-400 bg-green-400/10 px-3 py-1.5 rounded-md border border-green-400/20 inline-flex items-center">
+                          <span className="mr-1">₹</span>
+                          {order.total?.toLocaleString() || '0'}
                         </div>
                       </td>
 
@@ -1106,7 +1147,7 @@ const OrderDetails = ({ sellerId = null, orderPath = null }) => {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="7" className="p-8 text-center text-gray-500 text-lg">
+                      <td colSpan="9" className="p-8 text-center text-gray-500 text-lg">
                         <div className="flex flex-col items-center">
                           <Package className="w-12 h-12 text-gray-600 mb-4" />
                           <p>No orders found matching your criteria.</p>

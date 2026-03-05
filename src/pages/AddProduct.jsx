@@ -1,14 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { 
-  Plus, X, Upload, Eye, Package, Tag, Ruler, Scale, Info, 
-  Globe, Palette, ShoppingBag, Percent, TrendingUp, BarChart3,
-  Hash, Weight, Target, Zap, Shield, Award, FileText, Star,
+import {
+  Plus, X, Upload, Eye, Package, Tag, Ruler, Info,
+  Globe, Palette, ShoppingBag,
+  Hash, Target, Zap, Shield, Award, FileText, Star,
   Check, AlertCircle, Clock, Image as ImageIcon, Layers,
-  Grid, Filter, PackageOpen, Box, Truck, Headphones, Wrench,
+  Filter, PackageOpen, Truck,
   Settings, Calendar, Users
 } from 'lucide-react';
 import { collection, doc, writeBatch, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../config/firebase';
 
 /* ------------------------------- Utilities ------------------------------- */
@@ -26,46 +26,45 @@ const generateSearchKeywords = (form) => {
   if (form.offerprice) texts.push(String(form.offerprice));
   if (form.price) texts.push(String(form.price));
   (form.tags || []).forEach((t) => t && texts.push(t));
-  (form.specifications || []).forEach((s) => { 
-    if (s.key) texts.push(s.key); 
-    if (s.value) texts.push(s.value); 
+  (form.specifications || []).forEach((s) => {
+    if (s.key) texts.push(s.key);
+    if (s.value) texts.push(s.value);
   });
   if (form['height(cm)']) texts.push(String(form['height(cm)']));
   if (form['length(cm)']) texts.push(String(form['length(cm)']));
   if (form['width(cm)']) texts.push(String(form['width(cm)']));
   if (form['weight(g)']) texts.push(String(form['weight(g)']));
-  
+
   // Add category and subcategory to search
   if (form.category) texts.push(form.category);
   if (form.subcategory) texts.push(form.subcategory);
-  if (form.subundercategory) texts.push(form.subundercategory);
-  
+
   const combined = texts.join(' ').toLowerCase();
   const rawTokens = combined.split(/\W+/).map((t) => t.trim()).filter(Boolean);
   const name = (form.name || '').toLowerCase();
   const nameTokens = [];
   const words = name.split(/\s+/).filter(Boolean);
-  
+
   words.forEach((w) => {
     if (w.length >= 2) nameTokens.push(w);
     for (let i = 2; i <= Math.min(w.length, 12); i++) {
       nameTokens.push(w.slice(0, i));
     }
   });
-  
+
   const tokens = [
-    ...rawTokens, 
-    ...nameTokens, 
+    ...rawTokens,
+    ...nameTokens,
     ...((form.searchkeywords || []) || []).map((k) => (k + '').toLowerCase())
   ];
-  
+
   const set = new Set();
-  tokens.forEach((t) => { 
-    if (!t) return; 
-    const clean = t.replace(/[_-]+/g, ''); 
-    if (clean.length >= 2) set.add(clean); 
+  tokens.forEach((t) => {
+    if (!t) return;
+    const clean = t.replace(/[_-]+/g, '');
+    if (clean.length >= 2) set.add(clean);
   });
-  
+
   return Array.from(set);
 };
 
@@ -79,7 +78,7 @@ const resolveSellerId = () => {
       if (s?.id) return s.id;
     }
   } catch { }
-  
+
   try {
     const rawUser = localStorage.getItem('user');
     if (rawUser) {
@@ -89,7 +88,7 @@ const resolveSellerId = () => {
       if (u?.id) return u.id;
     }
   } catch { }
-  
+
   const uid = auth?.currentUser?.uid;
   if (uid) return uid;
   return '';
@@ -97,35 +96,34 @@ const resolveSellerId = () => {
 
 /* -------------------------------- Defaults ------------------------------- */
 const initialForm = {
-  basesku: '', 
-  brand: '', 
-  careinstructions: '', 
-  color: '', 
+  basesku: '',
+  brand: '',
+  careinstructions: '',
+  color: '',
   description: '',
-  gender: '', 
-  'height(cm)': '', 
-  hsncode: '', 
-  images: [], 
+  gender: '',
+  'height(cm)': '',
+  hsncode: '',
+  images: [],
   'length(cm)': '',
-  material: '', 
-  name: '', 
-  name_lower: '', 
-  occasion: '', 
+  material: '',
+  name: '',
+  name_lower: '',
+  occasion: '',
   offerprice: '',
-  pattern: '', 
-  price: '', 
-  searchkeywords: [], 
-  sellerid: '', 
+  pattern: '',
+  price: '',
+  searchkeywords: [],
+  sellerid: '',
   seourl: '',
-  sizevariants: [], 
-  stock: '', 
-  'weight(g)': '', 
-  'width(cm)': '', 
+  sizevariants: [],
+  stock: '',
+  'weight(g)': '',
+  'width(cm)': '',
   sku: '',
-  category: '', 
-  subcategory: '', 
-  subundercategory: '', 
-  specifications: [], 
+  category: '',
+  subcategory: '',
+  specifications: [],
   tags: [],
   warranty: '',
   returnPolicy: '',
@@ -147,24 +145,6 @@ const initialForm = {
   metaKeywords: '',
 };
 
-// Color variants options
-const colorOptions = [
-  { name: 'Red', value: '#dc2626', textColor: 'text-white' },
-  { name: 'Blue', value: '#2563eb', textColor: 'text-white' },
-  { name: 'Green', value: '#16a34a', textColor: 'text-white' },
-  { name: 'Yellow', value: '#ca8a04', textColor: 'text-gray-900' },
-  { name: 'Purple', value: '#7c3aed', textColor: 'text-white' },
-  { name: 'Pink', value: '#db2777', textColor: 'text-white' },
-  { name: 'Orange', value: '#ea580c', textColor: 'text-white' },
-  { name: 'Black', value: '#000000', textColor: 'text-white' },
-  { name: 'White', value: '#ffffff', textColor: 'text-gray-900' },
-  { name: 'Gray', value: '#6b7280', textColor: 'text-white' },
-  { name: 'Brown', value: '#78350f', textColor: 'text-white' },
-  { name: 'Gold', value: '#fbbf24', textColor: 'text-gray-900' },
-  { name: 'Silver', value: '#d4d4d8', textColor: 'text-gray-900' },
-  { name: 'Navy Blue', value: '#1e3a8a', textColor: 'text-white' },
-  { name: 'Teal', value: '#0d9488', textColor: 'text-white' },
-];
 
 // Size variants
 const sizeOptions = {
@@ -216,8 +196,8 @@ const ViewProductModal = ({ open, onClose, product, categories = [] }) => {
                 <p className="text-gray-400 text-sm mt-1">Complete product details</p>
               </div>
             </div>
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="p-3 bg-gray-800/50 hover:bg-red-500/20 border border-gray-700 hover:border-red-500/30 rounded-xl transition-all duration-300 group"
             >
               <X className="w-5 h-5 text-gray-400 group-hover:text-red-400 transition-colors" />
@@ -352,10 +332,6 @@ const ViewProductModal = ({ open, onClose, product, categories = [] }) => {
                       <div className="text-xs text-gray-400 mb-1">Subcategory</div>
                       <div className="text-white font-medium">{product.subcategory || '—'}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Sub-undercategory</div>
-                      <div className="text-white font-medium">{product.subundercategory || '—'}</div>
-                    </div>
                   </div>
                   {renderField('Gender', product.gender)}
                   {renderField('SEO URL', product.seourl, Globe)}
@@ -395,7 +371,7 @@ const ViewProductModal = ({ open, onClose, product, categories = [] }) => {
               <h3 className="text-lg font-bold text-white mb-4">Tags</h3>
               <div className="flex flex-wrap gap-2">
                 {product.tags.map((tag, i) => (
-                  <span 
+                  <span
                     key={i}
                     className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 text-blue-300 rounded-full text-sm font-medium"
                   >
@@ -441,45 +417,44 @@ const AddProduct = () => {
   const [sizeVariants, setSizeVariants] = useState([]);
   const [selectedSizeType, setSelectedSizeType] = useState('');
 
+
   // Data States for Firebase Collections
   const [categories, setCategories] = useState([]);
   const [allSubcategories, setAllSubcategories] = useState([]);
-  const [allSubUnderCategories, setAllSubUnderCategories] = useState([]);
-  
+
   // Filtered UI States
   const [filteredSubcategories, setFilteredSubcategories] = useState([]);
-  const [filteredSubUnderCategories, setFilteredSubUnderCategories] = useState([]);
-  
+
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [sellers, setSellers] = useState([]);
   const [loadingSellers, setLoadingSellers] = useState(false);
   const [showSellerDropdown, setShowSellerDropdown] = useState(false);
 
-  const currentUserRaw = typeof window !== 'undefined' 
-    ? (localStorage.getItem('seller') || localStorage.getItem('user')) 
+  const currentUserRaw = typeof window !== 'undefined'
+    ? (localStorage.getItem('seller') || localStorage.getItem('user'))
     : null;
-  
+
   let parsedUser = null;
-  try { 
-    parsedUser = currentUserRaw ? JSON.parse(currentUserRaw) : {}; 
-  } catch { 
-    parsedUser = {}; 
+  try {
+    parsedUser = currentUserRaw ? JSON.parse(currentUserRaw) : {};
+  } catch {
+    parsedUser = {};
   }
-  
+
   const isAdmin = parsedUser?.role === 'admin' || parsedUser?.isAdmin === true;
 
-  useEffect(() => { 
-    setShowForm(true); 
+  useEffect(() => {
+    setShowForm(true);
     const sellerId = resolveSellerId();
     setDetectedSellerId(sellerId);
-    
+
     // Set the seller ID in form data if available
     if (sellerId) {
       setFormData(prev => ({ ...prev, sellerid: sellerId }));
     }
-    
+
     fetchAllCategories();
-    
+
     // If admin, fetch all sellers
     if (isAdmin) {
       fetchAllSellers();
@@ -491,34 +466,27 @@ const AddProduct = () => {
   const fetchAllCategories = async () => {
     try {
       setLoadingCategories(true);
-      
+
       // Fetch main categories
       const categoriesCollection = collection(db, 'category');
       const categoriesSnapshot = await getDocs(categoriesCollection);
-      const categoriesData = categoriesSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const categoriesData = categoriesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       }));
       setCategories(categoriesData);
-      
+
       // Fetch subcategories
       const subcategoriesCollection = collection(db, 'subcategory');
       const subcategoriesSnapshot = await getDocs(subcategoriesCollection);
-      const subcategoriesData = subcategoriesSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const subcategoriesData = subcategoriesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       }));
       setAllSubcategories(subcategoriesData);
-      
-      // Fetch sub-undercategories
-      const subUnderCollection = collection(db, 'subundercategory');
-      const subUnderSnapshot = await getDocs(subUnderCollection);
-      const subUnderData = subUnderSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      setAllSubUnderCategories(subUnderData);
-      
+
+
+
     } catch (error) {
       console.error('Error fetching categories:', error);
       setMessage({ type: 'error', text: 'Failed to load categories from database' });
@@ -533,9 +501,9 @@ const AddProduct = () => {
       setLoadingSellers(true);
       const sellersCollection = collection(db, 'sellers');
       const sellersSnapshot = await getDocs(sellersCollection);
-      const sellersData = sellersSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const sellersData = sellersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       }));
       setSellers(sellersData);
     } catch (error) {
@@ -561,7 +529,7 @@ const AddProduct = () => {
       'Groceries': <Package className="w-4 h-4" />,
       'Books': <FileText className="w-4 h-4" />,
     };
-    
+
     return iconMap[categoryName] || <Package className="w-4 h-4" />;
   };
 
@@ -573,38 +541,23 @@ const AddProduct = () => {
     } else {
       setFilteredSubcategories([]);
     }
-    setFormData(prev => ({ ...prev, subcategory: '', subundercategory: '' }));
+    setFormData(prev => ({ ...prev, subcategory: '' }));
   }, [formData.category, allSubcategories]);
 
-  // Filter sub-undercategories when subcategory changes
-  useEffect(() => {
-    if (formData.subcategory) {
-      const selectedSub = allSubcategories.find(s => s.name === formData.subcategory);
-      if (selectedSub) {
-        // Match using subCategoryId field
-        const filtered = allSubUnderCategories.filter(
-          item => item.subCategoryId === selectedSub.id
-        );
-        setFilteredSubUnderCategories(filtered);
-      }
-    } else {
-      setFilteredSubUnderCategories([]);
-    }
-    setFormData(prev => ({ ...prev, subundercategory: '' }));
-  }, [formData.subcategory, allSubUnderCategories, allSubcategories]);
+
 
   const generatedKeywordsPreview = useMemo(() => generateSearchKeywords(formData), [formData]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     if (type === 'checkbox') {
       setFormData(prev => ({ ...prev, [name]: checked }));
     } else if (name.includes('.')) {
       const [parent, child] = name.split('.');
-      setFormData(prev => ({ 
-        ...prev, 
-        [parent]: { ...(prev[parent] || {}), [child]: value } 
+      setFormData(prev => ({
+        ...prev,
+        [parent]: { ...(prev[parent] || {}), [child]: value }
       }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -619,7 +572,7 @@ const AddProduct = () => {
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    
+
     setIsUploading(true);
     setUploadProgress(0);
     const uploadedUrls = [];
@@ -632,7 +585,7 @@ const AddProduct = () => {
           setMessage({ type: 'error', text: `❌ Image "${file.name}" exceeds 10MB limit` });
           continue;
         }
-        
+
         const storageRef = ref(storage, `product_images/${sellerId}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
         const url = await getDownloadURL(snapshot.ref);
@@ -641,8 +594,8 @@ const AddProduct = () => {
       }
 
       if (uploadedUrls.length > 0) {
-        setFormData(prev => ({ 
-          ...prev, 
+        setFormData(prev => ({
+          ...prev,
           images: [...(prev.images || []), ...uploadedUrls]
         }));
         setMessage({ type: 'success', text: `✅ Successfully uploaded ${uploadedUrls.length} image(s)` });
@@ -658,9 +611,9 @@ const AddProduct = () => {
   };
 
   const removeImage = (urlToRemove) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      images: (prev.images || []).filter(url => url !== urlToRemove) 
+    setFormData(prev => ({
+      ...prev,
+      images: (prev.images || []).filter(url => url !== urlToRemove)
     }));
   };
 
@@ -669,19 +622,19 @@ const AddProduct = () => {
       setMessage({ type: 'error', text: '❌ Please fill both key and value for specification' });
       return;
     }
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      specifications: [...(prev.specifications || []), { ...newSpec }] 
+
+    setFormData(prev => ({
+      ...prev,
+      specifications: [...(prev.specifications || []), { ...newSpec }]
     }));
     setNewSpec({ key: '', value: '' });
     setMessage({ type: 'success', text: '✅ Specification added successfully' });
   };
 
   const removeSpecification = (index) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      specifications: (prev.specifications || []).filter((_, idx) => idx !== index) 
+    setFormData(prev => ({
+      ...prev,
+      specifications: (prev.specifications || []).filter((_, idx) => idx !== index)
     }));
   };
 
@@ -691,86 +644,98 @@ const AddProduct = () => {
       setMessage({ type: 'error', text: '❌ Please enter a tag' });
       return;
     }
-    
+
     if (tag.length > 50) {
       setMessage({ type: 'error', text: '❌ Tag must be less than 50 characters' });
       return;
     }
-    
+
     const currentTags = formData.tags || [];
     if (currentTags.includes(tag)) {
       setMessage({ type: 'warning', text: '⚠️ Tag already exists' });
       return;
     }
-    
+
     setFormData(prev => ({ ...prev, tags: [...currentTags, tag] }));
     setNewTag('');
     setMessage({ type: 'success', text: '✅ Tag added successfully' });
   };
 
   const removeTag = (tagToRemove) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      tags: (prev.tags || []).filter(tag => tag !== tagToRemove) 
+    setFormData(prev => ({
+      ...prev,
+      tags: (prev.tags || []).filter(tag => tag !== tagToRemove)
     }));
   };
 
-  const toggleColor = (color) => {
-    setSelectedColors(prev => {
-      const isSelected = prev.includes(color);
-      const newColors = isSelected 
-        ? prev.filter(c => c !== color)
-        : [...prev, color];
-      
-      setFormData(prevForm => ({
-        ...prevForm,
-        colorVariants: newColors.map(colorName => ({
-          name: colorName,
-          hex: colorOptions.find(c => c.name === colorName)?.value || '#000000'
-        }))
-      }));
-      
-      return newColors;
-    });
-  };
+const toggleColor = (color) => {
+  setSelectedColors(prev => {
+    const isSelected = prev.includes(color);
+
+    const newColors = isSelected
+      ? prev.filter(c => c !== color)
+      : [...prev, color];
+
+    setFormData(prevForm => ({
+      ...prevForm,
+      colorVariants: newColors.map(colorName => ({
+        name: colorName
+      }))
+    }));
+
+    return newColors;
+  });
+};
 
   const toggleSize = (size) => {
     setSizeVariants(prev => {
-      const isSelected = prev.includes(size);
-      const newSizes = isSelected 
-        ? prev.filter(s => s !== size)
-        : [...prev, size];
-      
+      const exists = prev.find(v => v.size === size);
+
+      let updated;
+
+      if (exists) {
+        updated = prev.filter(v => v.size !== size);
+      } else {
+        updated = [
+          ...prev,
+          {
+            size: size,
+            price: Number(formData.price) || 0,
+            sku: `${formData.basesku || "SKU"}_${size}`,
+            stock: Number(formData.stock) || 0
+          }
+        ];
+      }
+
       setFormData(prevForm => ({
         ...prevForm,
-        sizevariants: newSizes
+        sizevariants: updated
       }));
-      
-      return newSizes;
+
+      return updated;
     });
   };
 
   const validateForm = () => {
     const errors = [];
-    
+
     if (!formData.name?.trim()) errors.push('Product name is required');
     if (!formData.category) errors.push('Category is required');
     if (!formData.subcategory) errors.push('Subcategory is required');
-    if (!formData.subundercategory) errors.push('Sub-undercategory is required');
     if (!formData.sellerid?.trim()) errors.push('Seller ID is required');
-    
+
     const price = Number(formData.price);
     if (isNaN(price) || price <= 0) errors.push('Valid price is required');
-    
+
     const stock = parseInt(formData.stock, 10);
     if (isNaN(stock) || stock < 0) errors.push('Valid stock quantity is required');
-    
+
     if (formData.images?.length === 0) errors.push('At least one image is required');
-    
+
     if (errors.length > 0) {
       return { ok: false, message: errors.join('. ') };
     }
-    
+
     return { ok: true };
   };
 
@@ -791,7 +756,7 @@ const AddProduct = () => {
       const mergedKeywords = Array.from(new Set([...(formData.searchkeywords || []), ...autoKeywords]));
       const name_lower = (formData.name || '').toLowerCase().trim();
       const sellerIdVal = (formData.sellerid || '').trim();
-      
+
       if (!sellerIdVal) {
         setMessage({ type: 'error', text: '❌ Seller ID is required' });
         setIsLoading(false);
@@ -814,11 +779,10 @@ const AddProduct = () => {
         stock: formData.stock ? parseInt(formData.stock, 10) : 0,
         discount: formData.discount ? Number(formData.discount) : null,
         searchkeywords: mergedKeywords,
-        colorVariants: selectedColors.map(colorName => ({
-          name: colorName,
-          hex: colorOptions.find(c => c.name === colorName)?.value || '#000000'
-        })),
-        sizevariants: sizeVariants,
+       colorVariants: selectedColors.map(colorName => ({
+  name: colorName
+})),
+        sizevariants: formData.sizevariants || [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         status: 'active',
@@ -839,7 +803,7 @@ const AddProduct = () => {
       const batch = writeBatch(db);
       batch.set(doc(db, 'products', newId), productDoc);
       batch.set(doc(db, 'seller_products', newId), sellerProductDoc);
-      
+
       // Also add to seller's collection if exists
       if (sellerIdVal) {
         batch.set(doc(db, `sellers/${sellerIdVal}/products`, newId), {
@@ -857,21 +821,20 @@ const AddProduct = () => {
       // Update state and show success
       setLastSavedProduct({ ...productDoc });
       setOpenViewModal(true);
-      
+
       // Reset form but keep seller ID
-      setFormData({ 
-        ...initialForm, 
+      setFormData({
+        ...initialForm,
         sellerid: sellerIdVal // Keep the same seller ID
       });
       setSelectedColors([]);
       setSizeVariants([]);
       setSelectedSizeType('');
       setFilteredSubcategories([]);
-      setFilteredSubUnderCategories([]);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `🎉 Product "${productDoc.name}" created successfully! ID: ${newId}` 
+
+      setMessage({
+        type: 'success',
+        text: `🎉 Product "${productDoc.name}" created successfully! ID: ${newId}`
       });
 
       // Clear success message after 5 seconds
@@ -881,7 +844,7 @@ const AddProduct = () => {
 
     } catch (error) {
       console.error('Error creating product:', error);
-      
+
       let errorMessage = '❌ Failed to create product. Please try again.';
       if (error.code === 'permission-denied') {
         errorMessage = '🔐 Permission denied. Check Firebase rules.';
@@ -892,7 +855,7 @@ const AddProduct = () => {
       } else if (error.message?.includes('quota')) {
         errorMessage = '📊 Storage quota exceeded. Please upgrade your plan.';
       }
-      
+
       setMessage({ type: 'error', text: errorMessage });
     } finally {
       setIsLoading(false);
@@ -903,17 +866,31 @@ const AddProduct = () => {
     <button
       type="button"
       onClick={() => setActiveSection(id)}
-      className={`flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold ${
-        active 
-          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-xl shadow-blue-500/25 transform scale-105' 
-          : 'bg-gray-800/50 text-gray-400 hover:text-white hover:bg-gray-700/50 border border-gray-700'
-      }`}
+      className={`flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold ${active
+        ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-xl shadow-blue-500/25 transform scale-105'
+        : 'bg-gray-800/50 text-gray-400 hover:text-white hover:bg-gray-700/50 border border-gray-700'
+        }`}
     >
       <Icon className="w-5 h-5" />
       {label}
     </button>
   );
 
+  const sectionOrder = ['basic', 'pricing', 'media', 'variants'];
+
+  const handleNext = () => {
+    const currentIndex = sectionOrder.indexOf(activeSection);
+    if (currentIndex < sectionOrder.length - 1) {
+      setActiveSection(sectionOrder[currentIndex + 1]);
+    }
+  };
+
+  const handlePrevious = () => {
+    const currentIndex = sectionOrder.indexOf(activeSection);
+    if (currentIndex > 0) {
+      setActiveSection(sectionOrder[currentIndex - 1]);
+    }
+  };
   const ProgressBar = ({ label, value, color = "blue" }) => (
     <div className="w-full">
       <div className="flex justify-between text-xs text-gray-400 mb-1">
@@ -921,7 +898,7 @@ const AddProduct = () => {
         <span>{value}%</span>
       </div>
       <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-        <div 
+        <div
           className={`h-full rounded-full bg-gradient-to-r from-${color}-500 to-${color}-600 transition-all duration-300`}
           style={{ width: `${value}%` }}
         />
@@ -955,7 +932,7 @@ const AddProduct = () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-4">
               {detectedSellerId && (
                 <div className="px-4 py-2.5 bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/30 rounded-xl">
@@ -965,7 +942,7 @@ const AddProduct = () => {
                   </div>
                 </div>
               )}
-              
+
               {lastSavedProduct && (
                 <button
                   onClick={() => setOpenViewModal(true)}
@@ -975,7 +952,7 @@ const AddProduct = () => {
                   <span className="text-sm font-medium">View Last Product</span>
                 </button>
               )}
-              
+
               <button
                 onClick={() => setShowForm(!showForm)}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl font-medium transition-all duration-300 border border-gray-600 hover:border-gray-500"
@@ -1000,7 +977,7 @@ const AddProduct = () => {
               </div>
               <ProgressBar value={69} color="blue" />
             </div>
-            
+
             <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1013,7 +990,7 @@ const AddProduct = () => {
               </div>
               <ProgressBar value={(formData.images?.length || 0) * 10} color="green" />
             </div>
-            
+
             <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1026,7 +1003,7 @@ const AddProduct = () => {
               </div>
               <ProgressBar value={Math.min((formData.specifications?.length || 0) * 10, 100)} color="purple" />
             </div>
-            
+
             <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1044,13 +1021,12 @@ const AddProduct = () => {
 
         {/* Message Alert */}
         {message.text && (
-          <div className={`relative overflow-hidden rounded-xl border p-4 mb-6 backdrop-blur-sm ${
-            message.type === 'success'
-              ? 'bg-gradient-to-r from-green-500/10 to-green-600/10 border-green-500/30'
-              : message.type === 'error'
+          <div className={`relative overflow-hidden rounded-xl border p-4 mb-6 backdrop-blur-sm ${message.type === 'success'
+            ? 'bg-gradient-to-r from-green-500/10 to-green-600/10 border-green-500/30'
+            : message.type === 'error'
               ? 'bg-gradient-to-r from-red-500/10 to-red-600/10 border-red-500/30'
               : 'bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border-yellow-500/30'
-          }`}>
+            }`}>
             <div className="flex items-center gap-3">
               {message.type === 'success' && (
                 <div className="p-2 bg-green-500/20 rounded-lg">
@@ -1063,10 +1039,9 @@ const AddProduct = () => {
                 </div>
               )}
               <div className="flex-1">
-                <p className={`font-medium ${
-                  message.type === 'success' ? 'text-green-300' :
+                <p className={`font-medium ${message.type === 'success' ? 'text-green-300' :
                   message.type === 'error' ? 'text-red-300' : 'text-yellow-300'
-                }`}>
+                  }`}>
                   {message.text}
                 </p>
               </div>
@@ -1092,7 +1067,6 @@ const AddProduct = () => {
                 <SectionButton id="pricing" icon={Tag} label="Pricing & Stock" active={activeSection === 'pricing'} />
                 <SectionButton id="media" icon={ImageIcon} label="Media" active={activeSection === 'media'} />
                 <SectionButton id="variants" icon={Palette} label="Variants" active={activeSection === 'variants'} />
-                <SectionButton id="advanced" icon={Settings} label="Advanced" active={activeSection === 'advanced'} />
               </div>
             </div>
 
@@ -1105,7 +1079,7 @@ const AddProduct = () => {
                   </div>
                   <h2 className="text-xl font-bold text-white">Seller Information</h2>
                 </div>
-                
+
                 {showSellerDropdown ? (
                   <div>
                     <label className="block text-gray-300 text-sm font-medium mb-2">
@@ -1133,8 +1107,8 @@ const AddProduct = () => {
                       </select>
                     )}
                     <p className="text-xs text-gray-500 mt-1">
-                      {sellers.length === 0 && !loadingSellers 
-                        ? 'No sellers found in database' 
+                      {sellers.length === 0 && !loadingSellers
+                        ? 'No sellers found in database'
                         : 'Select the seller who will own this product'}
                     </p>
                   </div>
@@ -1169,7 +1143,7 @@ const AddProduct = () => {
                       </div>
                       <h2 className="text-xl font-bold text-white">Basic Information</h2>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-gray-300 text-sm font-medium mb-2">
@@ -1247,27 +1221,7 @@ const AddProduct = () => {
                         )}
                       </div>
 
-                      <div>
-                        <label className="block text-gray-300 text-sm font-medium mb-2">Sub-undercategory *</label>
-                        <select
-                          name="subundercategory"
-                          value={formData.subundercategory}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 focus:bg-gray-800 transition-all duration-300"
-                          required
-                          disabled={!formData.subcategory || filteredSubUnderCategories.length === 0}
-                        >
-                          <option value="">Select Sub-undercategory</option>
-                          {filteredSubUnderCategories.map((item) => (
-                            <option key={item.id} value={item.name}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                        {formData.subcategory && filteredSubUnderCategories.length === 0 && (
-                          <p className="text-xs text-yellow-400 mt-1">No sub-undercategories available for this subcategory</p>
-                        )}
-                      </div>
+
 
                       <div>
                         <label className="block text-gray-300 text-sm font-medium mb-2">Base SKU</label>
@@ -1362,22 +1316,7 @@ const AddProduct = () => {
                         <p className="text-xs text-gray-500 mt-1">Optional discounted price</p>
                       </div>
 
-                      <div>
-                        <label className="block text-gray-300 text-sm font-medium mb-2">Discount (%)</label>
-                        <div className="relative">
-                          <input
-                            name="discount"
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={formData.discount}
-                            onChange={handleInputChange}
-                            className="w-full pl-4 pr-10 py-3 bg-white border-2 border-gray-300 rounded-xl text-gray-800 text-sm focus:outline-none focus:border-green-500 focus:bg-white transition-all duration-300"
-                            placeholder="0"
-                          />
-                          <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-600">%</span>
-                        </div>
-                      </div>
+
 
                       <div>
                         <label className="block text-gray-300 text-sm font-medium mb-2">
@@ -1405,37 +1344,6 @@ const AddProduct = () => {
                           className="w-full px-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-gray-800 text-sm focus:outline-none focus:border-green-500 focus:bg-white transition-all duration-300"
                           placeholder="HSN Code for taxation"
                         />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                      <div>
-                        <label className="block text-gray-300 text-sm font-medium mb-2">Manufacturer</label>
-                        <input
-                          name="manufacturer"
-                          value={formData.manufacturer}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-green-500 focus:bg-gray-800 transition-all duration-300"
-                          placeholder="Manufacturer name"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-gray-300 text-sm font-medium mb-2">Country of Origin</label>
-                        <select
-                          name="country"
-                          value={formData.country}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm focus:outline-none focus:border-green-500 focus:bg-gray-800 transition-all duration-300"
-                        >
-                          <option value="">Select Country</option>
-                          <option value="IN">India</option>
-                          <option value="US">United States</option>
-                          <option value="CN">China</option>
-                          <option value="DE">Germany</option>
-                          <option value="JP">Japan</option>
-                          <option value="KR">South Korea</option>
-                        </select>
                       </div>
                     </div>
                   </div>
@@ -1467,7 +1375,7 @@ const AddProduct = () => {
                         {isUploading ? (
                           <div className="space-y-4">
                             <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
-                              <div 
+                              <div
                                 className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
                                 style={{ width: `${uploadProgress}%` }}
                               />
@@ -1484,7 +1392,7 @@ const AddProduct = () => {
                           </label>
                         )}
 
-                        <input 
+                        <input
                           id="image-upload"
                           type="file"
                           multiple
@@ -1532,161 +1440,239 @@ const AddProduct = () => {
                 </div>
               )}
 
-              {/* Advanced Section (for specifications, tags, etc.) */}
-              {activeSection === 'advanced' && (
+              {/* Variants Section - New Addition */}
+              {activeSection === 'variants' && (
                 <div className="space-y-6 animate-fadeIn">
+                  {/* Dimensions & Attributes from first image */}
+                  <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-2xl p-6 border border-gray-700/50 backdrop-blur-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2.5 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl">
+                        <Ruler className="w-5 h-5 text-white" />
+                      </div>
+                      <h2 className="text-xl font-bold text-white">Dimensions & Attributes</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Length (cm)
+                        </label>
+                        <input
+                          name="length(cm)"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData['length(cm)']}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Width (cm)
+                        </label>
+                        <input
+                          name="width(cm)"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData['width(cm)']}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Height (cm)
+                        </label>
+                        <input
+                          name="height(cm)"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData['height(cm)']}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="0.0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Weight (g)
+                        </label>
+                        <input
+                          name="weight(g)"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={formData['weight(g)']}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="0.0"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-4">
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Color
+                        </label>
+                        <input
+                          name="color"
+                          value={formData.color}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="e.g., Red, Blue, Black"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Material
+                        </label>
+                        <input
+                          name="material"
+                          value={formData.material}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="e.g., Cotton, Leather, Plastic"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Pattern
+                        </label>
+                        <input
+                          name="pattern"
+                          value={formData.pattern}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="e.g., Striped, Checked, Solid"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-2">
+                          Occasion
+                        </label>
+                        <input
+                          name="occasion"
+                          value={formData.occasion}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:bg-gray-800 transition-all duration-300"
+                          placeholder="e.g., Casual, Formal, Party"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+
+                  {/* Size Variants */}
                   <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-2xl p-6 border border-gray-700/50 backdrop-blur-sm">
                     <div className="flex items-center gap-3 mb-6">
                       <div className="p-2.5 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl">
-                        <Settings className="w-5 h-5 text-white" />
+                        <Layers className="w-5 h-5 text-white" />
                       </div>
-                      <h2 className="text-xl font-bold text-white">Advanced Settings</h2>
+                      <h2 className="text-xl font-bold text-white">Size Variants</h2>
                     </div>
 
-                    {/* Specifications */}
-                    <div className="mb-8">
-                      <h3 className="text-lg font-semibold text-white mb-4">Specifications</h3>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-gray-300 text-sm font-medium mb-2">Key</label>
-                            <input
-                              type="text"
-                              value={newSpec.key}
-                              onChange={(e) => setNewSpec({...newSpec, key: e.target.value})}
-                              className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-orange-500 focus:bg-gray-800 transition-all duration-300"
-                              placeholder="e.g., Screen Size"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-gray-300 text-sm font-medium mb-2">Value</label>
-                            <input
-                              type="text"
-                              value={newSpec.value}
-                              onChange={(e) => setNewSpec({...newSpec, value: e.target.value})}
-                              className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-orange-500 focus:bg-gray-800 transition-all duration-300"
-                              placeholder="e.g., 6.1 inches"
-                            />
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={addSpecification}
-                          className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium rounded-xl transition-all duration-300 flex items-center gap-2"
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-3">
+                          Size Type
+                        </label>
+                        <select
+                          value={selectedSizeType}
+                          onChange={(e) => setSelectedSizeType(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm focus:outline-none focus:border-orange-500 focus:bg-gray-800 transition-all duration-300"
                         >
-                          <Plus className="w-4 h-4" />
-                          Add Specification
-                        </button>
+                          <option value="">Select Size Type</option>
+                          <option value="Clothing">Clothing (XS, S, M, L, XL)</option>
+                          <option value="Footwear">Footwear (6, 7, 8, 9, 10)</option>
+                          <option value="Electronics">Electronics</option>
+                          <option value="Home">Home</option>
+                          <option value="Generic">Generic</option>
+                        </select>
                       </div>
 
-                      {formData.specifications?.length > 0 && (
-                        <div className="mt-6">
-                          <h4 className="text-gray-300 font-medium mb-3">Added Specifications</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {formData.specifications.map((spec, index) => (
-                              <div key={index} className="flex items-center justify-between bg-gray-800/30 border border-gray-700/50 rounded-xl p-4">
-                                <div>
-                                  <div className="text-sm font-medium text-white">{spec.key}</div>
-                                  <div className="text-sm text-gray-400">{spec.value}</div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeSpecification(index)}
-                                  className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                                >
-                                  <X className="w-4 h-4 text-red-400" />
-                                </button>
-                              </div>
+                      <div>
+                        <label className="block text-gray-300 text-sm font-medium mb-3">
+                          Available Sizes
+                        </label>
+                        {selectedSizeType ? (
+                          <div className="flex flex-wrap gap-2">
+                            {sizeOptions[selectedSizeType]?.map((size) => (
+                              <button
+                                key={size}
+                                type="button"
+                                onClick={() => toggleSize(size)}
+                                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${sizeVariants.some(v => v.size === size)
+                                    ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg shadow-orange-500/25'
+                                    : 'bg-gray-800/50 border border-gray-700 text-gray-300 hover:border-orange-500'
+                                  }`}
+                              >
+                                {size}
+                              </button>
                             ))}
                           </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Tags */}
-                    <div className="mb-8">
-                      <h3 className="text-lg font-semibold text-white mb-4">Tags</h3>
-                      <div className="flex gap-2 mb-4">
-                        <input
-                          type="text"
-                          value={newTag}
-                          onChange={(e) => setNewTag(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                          className="flex-1 px-4 py-3 bg-gray-800/50 border-2 border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-400 focus:outline-none focus:border-orange-500 focus:bg-gray-800 transition-all duration-300"
-                          placeholder="Enter a tag and press Enter"
-                        />
-                        <button
-                          type="button"
-                          onClick={addTag}
-                          className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium rounded-xl transition-all duration-300"
-                        >
-                          Add
-                        </button>
+                        ) : (
+                          <p className="text-gray-500 text-sm py-3">Select a size type to see available options</p>
+                        )}
                       </div>
-
-                      {formData.tags?.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {formData.tags.map((tag, index) => (
-                            <div
-                              key={index}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500/20 to-orange-600/20 border border-orange-500/30 text-orange-300 rounded-full text-sm"
-                            >
-                              {tag}
-                              <button
-                                type="button"
-                                onClick={() => removeTag(tag)}
-                                className="hover:text-red-400 transition-colors"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
+
+                    {sizeVariants.length > 0 && (
+                      <p className="text-sm text-gray-400 mt-4">
+                        Selected sizes: {sizeVariants.map(s => s.size).join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Form Actions */}
               <div className="pt-8 border-t border-gray-700/50 flex flex-col sm:flex-row gap-4">
-                <button
-                  type="submit"
-                  disabled={isLoading || isUploading}
-                  className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-4 rounded-xl font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-xl shadow-blue-500/25 flex items-center justify-center gap-3 group"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Creating Product...
-                    </>
-                  ) : isUploading ? (
-                    <>
-                      <Clock className="w-5 h-5 animate-pulse" />
-                      Please Wait for Upload...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      Add Product to Inventory
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setFormData({ ...initialForm });
-                    setSelectedColors([]);
-                    setSizeVariants([]);
-                    setFilteredSubcategories([]);
-                    setFilteredSubUnderCategories([]);
-                  }}
-                  className="px-8 py-4 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-white rounded-xl font-medium transition-all duration-300 border border-gray-600 hover:border-gray-500"
-                >
-                  Cancel
-                </button>
+
+                {/* Previous Button */}
+                {activeSection !== "basic" && (
+                  <button
+                    type="button"
+                    onClick={handlePrevious}
+                    className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-all duration-300"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {/* Next Button */}
+                {activeSection !== "variants" && (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white py-4 rounded-xl font-semibold text-base transition-all duration-300"
+                  >
+                    Next
+                  </button>
+                )}
+
+                {/* Final Submit Button */}
+                {activeSection === "variants" && (
+                  <button
+                    type="submit"
+                    disabled={isLoading || isUploading}
+                    className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-4 rounded-xl font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-xl shadow-blue-500/25 flex items-center justify-center gap-3"
+                  >
+                    {isLoading ? "Creating Product..." : "Add Product to Inventory"}
+                  </button>
+                )}
+
               </div>
             </form>
           </div>
@@ -1716,9 +1702,9 @@ const AddProduct = () => {
       </div>
 
       {/* View Modal */}
-      <ViewProductModal 
-        open={openViewModal} 
-        onClose={() => setOpenViewModal(false)} 
+      <ViewProductModal
+        open={openViewModal}
+        onClose={() => setOpenViewModal(false)}
         product={lastSavedProduct}
         categories={categories}
       />
