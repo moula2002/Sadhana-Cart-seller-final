@@ -244,7 +244,7 @@ const ViewProductModal = ({ open, onClose, product, categories = [] }) => {
                 </div>
                 <div className="space-y-4">
                   {renderField('Name', product.name, Info)}
-                  {renderField('Product ID', product.productId, Hash)}
+                  {renderField('Product ID', product.productid, Hash)}
                   {renderField('Seller ID', product.sellerid, Shield)}
                   {renderField('Brand', product.brand, Award)}
                   {renderField('Base SKU', product.basesku)}
@@ -770,7 +770,7 @@ const toggleColor = (color) => {
       // Create product document
       const productDoc = {
         ...formData,
-        productId: newId,
+        productid: newId,
         sellerid: sellerIdVal,
         name: formData.name.trim(),
         name_lower,
@@ -807,7 +807,7 @@ const toggleColor = (color) => {
       // Also add to seller's collection if exists
       if (sellerIdVal) {
         batch.set(doc(db, `sellers/${sellerIdVal}/products`, newId), {
-          productId: newId,
+          productid: newId,
           name: productDoc.name,
           price: productDoc.price,
           stock: productDoc.stock,
